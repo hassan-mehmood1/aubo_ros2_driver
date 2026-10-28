@@ -1,90 +1,89 @@
 # aubo_ros2_driver
 
-遨博机器人ROS2驱动
+Robot ROS2 drive
 
-## 在 rviz 中查看 aubo 机器人模型（以 aubo_i5 为例）
+## View the aubo robot model in rviz (using aaubo_i5 as an example)
 
 ```bash
 ros2 launch aubo_description aubo_viewer.launch.py
 ```
 
-## 驱动真实机械臂前建议优先完成 URDF 校准
+## Priority for URDF Calibration
 
-建议先根据机器人当前控制器返回的校准补偿生成校准版 URDF，再进行实机驱动、MoveIt 规划和轨迹验证。
+It is recommended to generate a calibration version of URDF based on the calibration compensation returned by the robot's current controller, and then perform real-machine drive, MoveIt planning, and trajectory verification.
 
-如果直接使用未校准的默认 URDF，可能存在以下风险：
+If you use the uncalibrated default URDF directly, there may be the following risks:
 
-- 规划模型与真实机器人运动学参数不一致，末端位姿存在偏差。
-- RViz、MoveIt 中显示的姿态和实机反馈不完全一致，影响问题定位。
-- TCP 验证、轨迹复现、离线点位比对等依赖模型精度的功能，结果可能不可靠。
+- The planning model is inconsistent with the real robot kinematic parameters, and the end position is biased.
+- The attitude and real feedback in RViz and MoveIt are not exactly the same, affecting the problem positioning.
+- TCP validation, trajectory replication, and offline point-to-point matching depend on the precision of the model, and the results may be unreliable.
 
-推荐方法：
+Recommended Methods:
 
 ```bash
 cd /root/Desktop/aubo_ros2_ws
 python3 src/aubo_description/scripts/calibrate_urdf_dh.py \
   --robot-model aubo_i5 \
-  --robot-ip 192.168.127.128
+  --robot-ip 192.168.1.188
 colcon build --packages-select aubo_description
 ```
 
-说明：
+Description:
 
-- 生成结果默认写入 `src/aubo_description/urdf/<robot_model>_calibrated.urdf`。
-- `--robot-ip` 需要显式传入。
-- 运行前请确认当前 Python 环境可以导入 `numpy` 和 `pyaubo_sdk`。
-- 生成后需要单独重新编译 `aubo_description` 包。
+- Generate results written by default  `src/aubo_description/urdf/<robot_model>_calibrated.urdf`.
+- `--robot-ip` It needs to be clearly introduced.
+- Before running, make sure that the current Python environment can be imported  `numpy` and `pyaubo_sdk`。
+- It needs to be re-compiled separately after generation.  `aubo_description` The bag.
 
-## 驱动真实机械臂 aubo_i5（修改机器人对应 `robot_ip`、`aubo_type`）
+## Drive the real robotic arm aubo_i5 (modify the robot corresponding) `robot_ip`、`aubo_type`）
 
 ```bash
 source install/setup.bash
-ros2 launch aubo_ros2_driver aubo_control.launch.py aubo_type:=aubo_i5 robot_ip:=192.168.127.128 \
+ros2 launch aubo_ros2_driver aubo_control.launch.py aubo_type:=aubo_i5 robot_ip:=192.168.1.188 \
   use_fake_hardware:=false
 ros2 launch aubo_moveit_config aubo_moveit.launch.py aubo_type:=aubo_i5
 ```
 
-## 驱动真实机械臂 aubo_i5 单点轨迹执行 demo（修改机器人对应 `robot_ip`、`aubo_type`）
+## Drive the real robotic arm aubo_i5 single-point trajectory execution demo (modify robot correspondence) `robot_ip`、`aubo_type`）
 
 ```bash
 source install/setup.bash
-ros2 launch aubo_ros2_driver aubo_control.launch.py aubo_type:=aubo_i5 robot_ip:=192.168.127.128 \
+ros2 launch aubo_ros2_driver aubo_control.launch.py aubo_type:=aubo_i5 robot_ip:=192.168.1.188 \
   use_fake_hardware:=false
 ros2 launch ros_joints_plan joints_plan.launch.py aubo_type:=aubo_i5
 ```
 
-## 服务节点驱动真实机械臂（修改机器人对应 `robot_ip`）
+## Service node drives the real robot arm (modifies the robot corresponding) `robot_ip`）
 
 ```bash
 source install/setup.bash
 ros2 launch aubo_ros2_driver aubo_client.launch.py robot_ip:=127.0.0.1 log_level:=info
 ```
 
-## 独立 Topic 命令节点
+## Independent Topic command node
 
-该节点直接通过 AUBO SDK 控制机械臂，不使用 ros2_control 硬件插件。不要同时启动其他会控制同一机械臂的驱动。
+The node controls the arm directly through the AUBO SDK and does not use the ros2_control hardware plug-in. Do not start other drives that control the same robotic arm at the same time.
 
 ```bash
 source install/setup.bash
-ros2 launch aubo_ros2_driver aubo_command.launch.py robot_ip:=192.168.127.128
+ros2 launch aubo_ros2_driver aubo_command.launch.py robot_ip:=192.168.1.188
 ```
+Command the topic:
 
-命令 Topic：
+- `/aubo/power_command` (`aubo_msgs/msg/AuboPowerCommand`)：`power_on=true` powering and starting,`false` Electricity.
+- `/aubo/joint_move` (`aubo_msgs/msg/AuboJointMove`)： Six-axis joint target, angle using rad/s, speed using rad/s, acceleration using rad/s^2.
+- `/aubo/linear_move` (`aubo_msgs/msg/AuboLinearMove`)：The goal  `PoseStamped`，Must be used with configuration.  `base_frame`（The acquiescence `base_link`）；Position unit meter, velocity/acceleration unit m/s, m/s2.
 
-- `/aubo/power_command` (`aubo_msgs/msg/AuboPowerCommand`)：`power_on=true` 上电并启动，`false` 下电。
-- `/aubo/joint_move` (`aubo_msgs/msg/AuboJointMove`)：六轴关节目标，角度使用弧度，速度使用 rad/s，加速度使用 rad/s^2。
-- `/aubo/linear_move` (`aubo_msgs/msg/AuboLinearMove`)：目标 `PoseStamped`，必须使用配置的 `base_frame`（默认 `base_link`）；位置单位米，速度/加速度单位 m/s、m/s^2。
+### Powered up and down
 
-### 上下电
-
-上电命令会请求机械臂上电并启动（松刹车），等待进入 Running 模式：
+The power-on command will ask the robot arm to be powered on and started (spine brakes) and wait to enter Running mode:
 
 ```bash
 ros2 topic pub --once /aubo/power_command aubo_msgs/msg/AuboPowerCommand \
 "{command_id: 'power-on-001', power_on: true}"
 ```
 
-下电命令：
+Order by electricity:
 
 ```bash
 ros2 topic pub --once /aubo/power_command aubo_msgs/msg/AuboPowerCommand \
